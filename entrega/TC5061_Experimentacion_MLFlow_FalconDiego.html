@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>TC5061 Experimentación con MLflow</title>
+<style>
+  @page { size: Letter; margin: 2.5cm; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.5; color: #000; margin: 0; background: #fff; }
+  .doc { max-width: 16.6cm; margin: 0 auto; }
+  h1 { font-size: 14pt; margin: 0 0 4pt; line-height: 1.3; }
+  h2 { font-size: 11pt; margin: 12pt 0 2pt; break-after: avoid; page-break-after: avoid; }
+  p { margin: 0 0 6pt; text-align: justify; }
+  .meta p { margin: 0; text-align: left; }
+  code, pre { font-family: Consolas, "Courier New", monospace; font-size: 9.5pt; }
+  pre { background: #f3f3f3; border: 1px solid #ddd; padding: 6pt 8pt; margin: 4pt 0 8pt; line-height: 1.35; white-space: pre-wrap; }
+  table { border-collapse: collapse; width: 100%; font-size: 10pt; line-height: 1.3; margin: 4pt 0 8pt; }
+  th, td { border: 1px solid #999; padding: 2pt 5pt; text-align: right; }
+  th:first-child, td:first-child { text-align: left; }
+  th { background: #eee; }
+  .anexo { page-break-before: always; }
+  figure { margin: 0 0 14pt; page-break-inside: avoid; }
+  figure img { max-width: 100%; max-height: 17cm; border: 1px solid #ccc; display: block; margin: 0 auto; }
+  figcaption { font-size: 11pt; line-height: 1.5; margin-top: 3pt; }
+  a { color: #0645ad; }
+  p code { white-space: nowrap; }
+  .portada { height: 228mm; display: flex; flex-direction: column; align-items: center; text-align: center; page-break-after: always; break-after: page; }
+  .portada img { width: 13.5cm; margin-top: 0.6cm; }
+  .portada .institucion { font-size: 20pt; line-height: 1.5; margin: 1.2cm 0 0; text-align: center; }
+  .portada .titulo { font-size: 20pt; line-height: 1.5; font-style: italic; margin: 0.6cm 0 0; text-align: center; }
+  .portada .autor { margin-top: auto; align-self: flex-end; text-align: right; font-size: 14pt; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="doc">
+
+<section class="portada">
+<img src="logo_tec.jpg" alt="Tecnológico de Monterrey">
+<p class="institucion">INSTITUTO TECNOLÓGICO Y DE ESTUDIOS<br>SUPERIORES DE MONTERREY</p>
+<p class="titulo">Actividad Individual. Código de experimentación base con MLflow</p>
+<p class="autor">Diego Falcón Costilla A01139580<br>Operaciones de aprendizaje automático</p>
+</section>
+
+<h2 style="margin-top:0">1. Del notebook al script y parametrización</h2>
+<p>El código está en el repositorio <a href="https://github.com/diegofalconcostilla/tc5061-experimentacion-mlflow">github.com/diegofalconcostilla/tc5061-experimentacion-mlflow</a>. El modelo base de la semana anterior predice el precio en USD de un diamante a partir de su peso y de su calidad de corte, color y claridad (dataset Diamonds de Kaggle). La lógica de modelado se movió a <code>src/train.py</code>, organizado en funciones de una sola responsabilidad: <code>load_data</code>, <code>clean_data</code> (las reglas de limpieza del notebook), <code>split_data</code> (división estratificada por peso), <code>build_pipeline</code>, <code>evaluate</code> y <code>main</code>, que orquesta la corrida. El notebook <code>notebooks/exploracion_diamonds.ipynb</code> quedó sólo con la exploración y la justificación de la limpieza. Como la regresión lineal no tiene hiperparámetros y mostró subajuste, el script entrena por defecto un Random Forest y conserva el baseline lineal con <code>--model linear</code>. Se exponen <code>--n-estimators</code>, <code>--max-depth</code>, <code>--min-samples-leaf</code>, <code>--max-features</code>, <code>--log-target</code> y <code>--seed</code>, todos con valor por defecto y ayuda en <code>--help</code>.</p>
+<pre>python src/train.py                        # valores por defecto
+python src/train.py --n-estimators 200 --max-depth 16 --min-samples-leaf 2 \
+    --max-features 1.0 --seed 42             # mejor corrida
+.\run_experiments.ps1                      # las diez corridas
+mlflow ui --backend-store-uri sqlite:///mlflow.db</pre>
+
+<h2>2. Registro en MLflow y reproducibilidad</h2>
+<p>Cada corrida queda en el experimento <code>TC5061-diamonds-precio-experimentacion</code> y registra los hiperparámetros, la semilla y el tamaño de los conjuntos con <code>log_param</code>; RMSE, MAE y R² en entrenamiento y prueba, la brecha entre ambos, el porcentaje de predicciones negativas y el tiempo de entrenamiento con <code>log_metric</code>; un <code>metrics.json</code>, dos gráficas y la bitácora de limpieza con <code>log_artifact</code>; y el pipeline completo con firma mediante <code>mlflow.sklearn.log_model</code>. La semilla se fija en <code>random</code> y <code>numpy</code> y se pasa como <code>random_state</code> a la división, al bosque y a la importancia por permutación. La corrida por defecto se ejecutó dos veces y sus métricas coinciden en todos los decimales, y al borrar la base de tracking y repetir las diez corridas se obtuvieron los mismos valores; sólo cambia el tiempo de entrenamiento. Las versiones de Python 3.12.6, MLflow 3.16.0, scikit-learn 1.9.1 y demás librerías están fijadas en <code>requirements.txt</code>.</p>
+
+<h2>3. Análisis de resultados</h2>
+<p>Se partió de la configuración por defecto (200 árboles, profundidad 16, hoja mínima de 2 y la mitad de las variables por división) y se cambió un hiperparámetro a la vez, para atribuir cada diferencia a ese cambio. La Figura 1 muestra las diez corridas ordenadas por RMSE en prueba.</p>
+<p>La mejor configuración fue <code>rf-d16-l2-mf1-n200</code> (200 árboles, profundidad 16, hoja mínima de 2 y todas las variables en cada división), con un RMSE de 543 USD, un MAE de 279 USD y un R² de 0.981. Frente al baseline lineal reduce el RMSE 54 % y el MAE 65 %, y elimina las predicciones negativas, que en la regresión lineal eran 9.4 % del conjunto de prueba. La configuración sin límite de profundidad queda casi empatada en prueba (548), pero su RMSE de entrenamiento baja a 211 y la brecha con prueba casi se duplica (337 contra 185 USD), señal de que memoriza más sin generalizar mejor, y además tarda tres veces más en entrenar.</p>
+<p>El hiperparámetro más influyente fue <code>max_depth</code>. Al pasar de 4 a 8 y a 16 niveles el RMSE cae de 1,479 a 888 y a 554 USD, una reducción de 63 %; con profundidad 4 el bosque incluso es peor que la regresión lineal, porque tiene muy pocas hojas para representar la relación curva entre peso y precio. En la Figura 2 se ve el mismo patrón: las líneas que llegan a los valores altos de <code>test_rmse</code> salen de las profundidades bajas. Le sigue <code>min_samples_leaf</code>, que al subir de 2 a 20 empeora el RMSE 21 % al suavizar demasiado el modelo. En cambio, <code>max_features</code> sólo aporta una mejora de 2 % y <code>n_estimators</code> casi no influye: con 50 árboles el RMSE apenas sube 0.1 % y el entrenamiento es 3.5 veces más rápido, por lo que en un entorno con restricciones de cómputo sería una opción razonable. Entrenar sobre el logaritmo del precio empeoró el RMSE 4.5 %, porque esta métrica está dominada por los diamantes caros y la transformación reparte el esfuerzo del modelo hacia los baratos. En la importancia por permutación de la mejor corrida, <code>carat</code> domina (permutarla eleva el RMSE en unos 5,600 USD), seguida de <code>clarity</code> (1,170) y <code>color</code> (770).</p>
+<p>El ejercicio tiene limitaciones claras. Todas las corridas usan una única división train/test con la misma semilla, de modo que las diferencias pequeñas entre las cuatro mejores configuraciones (543 a 555 USD, alrededor de 2 %) podrían no ser significativas; haría falta validación cruzada o repetir con varias semillas para estimar su variabilidad. Además, la mejor configuración se eligió mirando el conjunto de prueba, lo que vuelve optimista su error; lo correcto sería seleccionar con un conjunto de validación y reservar la prueba para el final. El diseño de un factor a la vez no captura interacciones entre hiperparámetros, y el RMSE en USD no refleja el error relativo en diamantes pequeños, donde la transformación logarítmica podría resultar mejor. Finalmente, el experimento sólo registra el nombre del dataset y no un hash o versión del archivo, por lo que un cambio en el CSV no quedaría trazado en MLflow.</p>
+
+<div class="anexo">
+<h2>Anexo: evidencias de la interfaz de MLflow</h2>
+<figure>
+<img src="../evidencias/01-mlflow-tabla-corridas.png" alt="Tabla de corridas en MLflow">
+<figcaption>Figura 1. Tabla comparativa de las diez corridas del experimento <code>TC5061-diamonds-precio-experimentacion</code>, ordenada por <code>test_rmse</code>, con las métricas y los hiperparámetros como columnas. Las corridas <code>rf-d16-l2-mf0.5-n200</code> y <code>rf-d16-l2-mf0.5-n200-rep</code> tienen métricas idénticas.</figcaption>
+</figure>
+<figure>
+<img src="../evidencias/02-mlflow-comparacion.png" alt="Vista de comparación de corridas en MLflow">
+<figcaption>Figura 2. Vista de comparación de MLflow con las diez corridas. La gráfica de coordenadas paralelas relaciona <code>max_depth</code>, <code>min_samples_leaf</code>, <code>max_features</code> y <code>n_estimators</code> con <code>test_rmse</code>; las profundidades 4 y 8 producen los errores más altos.</figcaption>
+</figure>
+<figure>
+<img src="../evidencias/03-mlflow-detalle-corrida.png" alt="Detalle de la mejor corrida">
+<figcaption>Figura 3. Detalle de la mejor corrida, <code>rf-d16-l2-mf1-n200</code>: nueve métricas, once parámetros, etiquetas y el modelo registrado (<code>modelo</code>) asociado a cada métrica.</figcaption>
+</figure>
+<figure>
+<img src="../evidencias/04-mlflow-artefactos.png" alt="Artefactos de la mejor corrida">
+<figcaption>Figura 4. Artefactos de la misma corrida: gráficas de diagnóstico y de importancia por permutación, bitácora de limpieza y <code>metrics.json</code>, con la vista previa de los residuos.</figcaption>
+</figure>
+</div>
+
+</div>
+</body>
+</html>

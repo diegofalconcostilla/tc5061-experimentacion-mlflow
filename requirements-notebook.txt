@@ -1,0 +1,6 @@
+# Dependencias adicionales para ejecutar notebooks/exploracion_diamonds.ipynb
+-r requirements.txt
+seaborn==0.13.2
+jupyter==1.1.1
+nbconvert==7.17.1
+ipykernel==7.3.0
